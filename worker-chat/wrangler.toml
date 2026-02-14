@@ -1,0 +1,8 @@
+name = "busgal-chat"
+main = "src/index.ts"
+compatibility_date = "2025-02-01"
+
+[vars]
+POLZA_API_URL = "https://api.polza.ai/api/v1"
+POLZA_MODEL = "openai/gpt-4o"
+CHAT_TIMEOUT_MS = "25000"
