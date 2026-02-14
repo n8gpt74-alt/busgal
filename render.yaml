@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: busgal
+    env: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: CHAT_TIMEOUT_MS
+        value: 25000
