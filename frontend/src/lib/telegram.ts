@@ -84,20 +84,17 @@ export function getTelegramUser(): TelegramUser | null {
 
 // Initialize Telegram Web App
 export function initTelegramWebApp(): void {
-  if (isTelegramWebApp()) {
+  if (!isTelegramWebApp()) return
     const webApp = window.Telegram?.WebApp as any
-    webApp?.ready()
-    webApp?.expand()
-    
-    // Set theme colors
-    try {
-      webApp?.setHeaderColor?.('#0ea5e9')
-      webApp?.setBackgroundColor?.('#ffffff')
-    } catch (e) {
-      console.log('Telegram colors not supported')
-    }
-    
-    console.log('Telegram Web App initialized')
+  webApp?.ready?.()
+  webApp?.expand?.()
+
+  // Set theme colors (если поддерживается)
+  try {
+    webApp?.setHeaderColor?.('#0ea5e9')
+    webApp?.setBackgroundColor?.('#ffffff')
+  } catch {
+    // no-op
   }
 }
 

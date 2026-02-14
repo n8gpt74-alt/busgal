@@ -212,7 +212,7 @@ export default function Home() {
             </motion.button>
           </div>
         </div>
-      </header>
+      </motion.header>
 
       {/* User Type Selector */}
       <AnimatePresence>

@@ -47,6 +47,7 @@ export default function NotificationsPage() {
       }
     } catch (error) {
       console.error('Error saving settings:', error)
+      alert('Не удалось сохранить настройки. Проверьте соединение и попробуйте ещё раз.')
     } finally {
       setLoading(false)
     }
@@ -66,6 +67,7 @@ export default function NotificationsPage() {
       alert('Тестовое уведомление отправлено!')
     } catch (error) {
       console.error('Error:', error)
+      alert('Не удалось отправить тестовое уведомление.')
     }
   }
 

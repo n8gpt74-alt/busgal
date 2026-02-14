@@ -8,9 +8,13 @@ interface Message {
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, userType, history } = await request.json()
+    const body = await request.json().catch(() => null)
 
-    if (!message) {
+    const message = typeof body?.message === 'string' ? body.message : ''
+    const userType = typeof body?.userType === 'string' ? body.userType : ''
+    const history = Array.isArray(body?.history) ? body.history : []
+
+    if (!message.trim()) {
       return NextResponse.json(
         { error: 'Message is required' },
         { status: 400 }
@@ -38,30 +42,52 @@ export async function POST(request: NextRequest) {
     // Добавляем текущее сообщение
     messages.push({ role: 'user', content: message })
 
-    // Запрос к Polza AI API
+    // По умолчанию работаем в режиме заглушки, чтобы деплой жил без ключей.
+    // Если заданы env-переменные POLZA_API_KEY/POLZA_API_URL — используем Polza AI API.
     const apiKey = process.env.POLZA_API_KEY
     const apiUrl = process.env.POLZA_API_URL || 'https://api.polza.ai/api/v1'
     const model = process.env.POLZA_MODEL || 'openai/gpt-4o'
+    const controller = new AbortController()
+    const timeoutMs = Number(process.env.CHAT_TIMEOUT_MS || 25000)
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
+    const useStub = !apiKey
+
+    if (useStub) {
+      const assistantResponse = `Заглушка ответа (нет POLZA_API_KEY).
+
+Ваш вопрос: ${message}
+Тип: ${userType || 'ip_usn'}
+Сообщений в истории: ${Array.isArray(history) ? history.length : 0}`
+
+      return NextResponse.json({
+        response: assistantResponse,
+        success: true,
+        stub: true
+      })
+    }
     const response = await fetch(`${apiUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
+      signal: controller.signal,
       body: JSON.stringify({
         model: model,
         messages: messages,
         temperature: 0.7,
         max_tokens: 2000
       })
+    }).finally(() => {
+      clearTimeout(timeoutId)
     })
 
     if (!response.ok) {
-      const error = await response.text()
-      console.error('Polza API error:', error)
+      const errorText = await response.text().catch(() => '')
+      console.error('Polza API error:', errorText)
       return NextResponse.json(
-        { error: 'Failed to get response from AI', details: error },
+        { error: 'Failed to get response from AI' },
         { status: response.status }
       )
     }
@@ -75,10 +101,17 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return NextResponse.json(
+        { error: 'Upstream timeout' },
+        { status: 504 }
+      )
+    }
     console.error('Chat API error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     )
-  }
 }
+}
+
