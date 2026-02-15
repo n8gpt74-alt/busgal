@@ -1,9 +1,6 @@
 [build]
   command = "npm run build"
-  publish = ".next"
+  publish = "out"
 
 [build.environment]
   NEXT_PUBLIC_CHAT_API_URL = "https://busgal-chat.busgal-n8gpt.workers.dev/chat"
-
-[functions]
-  directory = ".next/server/functions"
