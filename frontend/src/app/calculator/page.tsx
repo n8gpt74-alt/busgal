@@ -28,10 +28,10 @@ const taxTypes = [
 ]
 
 const TAX_RATES = {
-  usn_6: { rate: 6, fixedContribution: 53000 },
-  usn_15: { rate: 15, minRate: 1, fixedContribution: 53000 },
+  usn_6: { rate: 6, fixedContributionMonthly: 4417 },
+  usn_15: { rate: 15, minRate: 1, fixedContributionMonthly: 4417 },
   patent: { maxIncome: 60000000, maxEmployees: 15 },
-  selfemployed: { ratePhysical: 4, rateLegal: 6, limit: 2400000 },
+  selfemployed: { ratePhysical: 4, rateLegal: 6, limitMonthly: 200000 },
   ooo: { rate: 6, ndflRate: 13, pensionRate: 22, fomsRate: 5.1, fssRate: 2.9 }
 }
 
@@ -52,21 +52,15 @@ export default function CalculatorPage() {
     const emp = parseInt(employees) || 0
     const sal = parseFloat(salary) || 0
     
-    // Приводим к годовой сумме
-    const annualIncome = period === 'month' ? inc * 12 : inc
-    const annualExpenses = period === 'month' ? exp * 12 : exp
-    const annualSalary = period === 'month' ? sal * 12 : sal
-    
     let calcResult: CalculationResult
 
     switch (selectedType) {
       case 'usn_6': {
         const rate = TAX_RATES.usn_6.rate / 100
-        const tax = annualIncome * rate
-        const fixed = TAX_RATES.usn_6.fixedContribution
-        const additional = annualIncome > 300000 ? (annualIncome - 300000) * 0.01 : 0
-        const contributions = fixed + additional
-        const taxReduction = annualIncome > 0 ? Math.min(tax, contributions) : 0
+        const tax = inc * rate
+        const fixedMonthly = TAX_RATES.usn_6.fixedContributionMonthly
+        const contributions = period === 'year' ? fixedMonthly * 12 : fixedMonthly
+        const taxReduction = inc > 0 ? Math.min(tax, contributions) : 0
         const finalTax = Math.max(0, tax - taxReduction)
         calcResult = {
           tax: Math.round(finalTax),
@@ -75,9 +69,8 @@ export default function CalculatorPage() {
           periodLabel: period === 'month' ? 'в месяц' : 'за год',
           details: [
             { label: period === 'month' ? 'Доход в месяц' : 'Доход за год', value: `${inc.toLocaleString()} ₽` },
-            { label: 'Годовой доход', value: `${annualIncome.toLocaleString()} ₽` },
             { label: 'Налог УСН', value: `${Math.round(tax).toLocaleString()} ₽` },
-            { label: 'Взносы за год', value: `${Math.round(contributions).toLocaleString()} ₽` },
+            { label: period === 'year' ? 'Взносы за год' : 'Взнос в месяц', value: `${Math.round(contributions).toLocaleString()} ₽` },
             { label: 'Вычет', value: `-${Math.round(taxReduction).toLocaleString()} ₽` },
           ]
         }
@@ -85,9 +78,9 @@ export default function CalculatorPage() {
       }
       case 'usn_15': {
         const rate = TAX_RATES.usn_15.rate / 100
-        const profit = Math.max(0, annualIncome - annualExpenses)
+        const profit = Math.max(0, inc - exp)
         const tax = profit * rate
-        const minTax = annualIncome * 0.01
+        const minTax = inc * 0.01
         const finalTax = Math.max(tax, minTax)
         calcResult = {
           tax: Math.round(finalTax),
@@ -98,7 +91,6 @@ export default function CalculatorPage() {
           details: [
             { label: period === 'month' ? 'Доход в месяц' : 'Доход за год', value: `${inc.toLocaleString()} ₽` },
             { label: period === 'month' ? 'Расходы в месяц' : 'Расходы за год', value: `${exp.toLocaleString()} ₽` },
-            { label: 'Годовой доход', value: `${annualIncome.toLocaleString()} ₽` },
             { label: 'Прибыль', value: `${profit.toLocaleString()} ₽` },
             { label: 'Налог УСН', value: `${Math.round(tax).toLocaleString()} ₽` },
           ]
@@ -106,8 +98,8 @@ export default function CalculatorPage() {
         break
       }
       case 'patent': {
-        const potentialIncome = annualIncome || 1000000
-        const patentCost = potentialIncome * 0.06
+        const baseIncome = inc || 1000000
+        const patentCost = period === 'year' ? baseIncome * 0.06 : baseIncome * 0.06 / 12
         calcResult = {
           tax: Math.round(patentCost),
           contributions: 0,
@@ -115,7 +107,7 @@ export default function CalculatorPage() {
           periodLabel: period === 'month' ? 'в месяц' : 'за год',
           details: [
             { label: period === 'month' ? 'Доход в месяц' : 'Доход за год', value: `${inc.toLocaleString()} ₽` },
-            { label: 'Потенциальный доход', value: `${potentialIncome.toLocaleString()} ₽` },
+            { label: 'Потенциальный доход', value: `${baseIncome.toLocaleString()} ₽` },
             { label: 'Стоимость патента', value: `${Math.round(patentCost).toLocaleString()} ₽` },
           ]
         }
@@ -123,7 +115,7 @@ export default function CalculatorPage() {
       }
       case 'selfemployed': {
         const rate = TAX_RATES.selfemployed.rateLegal / 100
-        const tax = annualIncome * rate
+        const tax = inc * rate
         calcResult = {
           tax: Math.round(tax),
           contributions: 0,
@@ -131,7 +123,6 @@ export default function CalculatorPage() {
           periodLabel: period === 'month' ? 'в месяц' : 'за год',
           details: [
             { label: period === 'month' ? 'Доход в месяц' : 'Доход за год', value: `${inc.toLocaleString()} ₽` },
-            { label: 'Годовой доход', value: `${annualIncome.toLocaleString()} ₽` },
             { label: 'Ставка', value: '6%' },
             { label: 'Налог', value: `${Math.round(tax).toLocaleString()} ₽` },
           ]
@@ -140,12 +131,12 @@ export default function CalculatorPage() {
       }
       case 'ooo': {
         const rate = TAX_RATES.ooo.rate / 100
-        const profit = Math.max(0, annualIncome - annualExpenses)
+        const profit = Math.max(0, inc - exp)
         const tax = profit * rate
-        const ndfl = annualSalary * 0.13
-        const pension = annualSalary * 0.22
-        const foms = annualSalary * 0.051
-        const fss = annualSalary * 0.029
+        const ndfl = sal * (period === 'year' ? 12 : 1) * 0.13
+        const pension = sal * (period === 'year' ? 12 : 1) * 0.22
+        const foms = sal * (period === 'year' ? 12 : 1) * 0.051
+        const fss = sal * (period === 'year' ? 12 : 1) * 0.029
         const contributions = pension + foms + fss
         calcResult = {
           tax: Math.round(tax),
@@ -155,7 +146,6 @@ export default function CalculatorPage() {
           details: [
             { label: period === 'month' ? 'Доход в месяц' : 'Доход за год', value: `${inc.toLocaleString()} ₽` },
             { label: period === 'month' ? 'Расходы в месяц' : 'Расходы за год', value: `${exp.toLocaleString()} ₽` },
-            { label: 'Годовой доход', value: `${annualIncome.toLocaleString()} ₽` },
             { label: 'Прибыль', value: `${profit.toLocaleString()} ₽` },
             { label: 'Налог УСН', value: `${Math.round(tax).toLocaleString()} ₽` },
           ]
@@ -253,7 +243,7 @@ export default function CalculatorPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  {period === 'month' ? 'Доход в месяц (₽)' : 'Годовой доход (₽)'}
+                  {period === 'month' ? 'Доход в месяц (₽)' : 'Доход за год (₽)'}
                 </label>
                 <input
                   type="number"
@@ -267,7 +257,7 @@ export default function CalculatorPage() {
               {(selectedType === 'usn_15' || selectedType === 'ooo') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    {period === 'month' ? 'Расходы в месяц (₽)' : 'Годовые расходы (₽)'}
+                    {period === 'month' ? 'Расходы в месяц (₽)' : 'Расходы за год (₽)'}
                   </label>
                   <input
                     type="number"
