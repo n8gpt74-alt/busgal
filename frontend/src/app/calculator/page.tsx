@@ -4,16 +4,18 @@ import { useState } from 'react'
 import { 
   Calculator, TrendingDown, TrendingUp, Wallet, Receipt, 
   Building, PiggyBank, Info, AlertCircle,
-  DollarSign
+  DollarSign, Calendar
 } from 'lucide-react'
 
 type TaxType = 'usn_6' | 'usn_15' | 'patent' | 'selfemployed' | 'ooo'
+type PeriodType = 'year' | 'month'
 
 interface CalculationResult {
   tax: number
   minTax?: number
   contributions: number
   total: number
+  periodLabel: string
   details: Array<{ label: string; value: string }>
 }
 
@@ -35,6 +37,7 @@ const TAX_RATES = {
 
 export default function CalculatorPage() {
   const [selectedType, setSelectedType] = useState<TaxType>('usn_6')
+  const [period, setPeriod] = useState<PeriodType>('year')
   const [result, setResult] = useState<CalculationResult | null>(null)
   const [income, setIncome] = useState('')
   const [expenses, setExpenses] = useState('')
@@ -42,32 +45,39 @@ export default function CalculatorPage() {
   const [salary, setSalary] = useState('')
 
   const currentType = taxTypes.find(t => t.id === selectedType)
-  const IconComponent = currentType?.icon || Calculator
 
   const calculate = () => {
     const inc = parseFloat(income) || 0
     const exp = parseFloat(expenses) || 0
     const emp = parseInt(employees) || 0
     const sal = parseFloat(salary) || 0
+    
+    // Приводим к годовой сумме
+    const annualIncome = period === 'month' ? inc * 12 : inc
+    const annualExpenses = period === 'month' ? exp * 12 : exp
+    const annualSalary = period === 'month' ? sal * 12 : sal
+    
     let calcResult: CalculationResult
 
     switch (selectedType) {
       case 'usn_6': {
         const rate = TAX_RATES.usn_6.rate / 100
-        const tax = inc * rate
+        const tax = annualIncome * rate
         const fixed = TAX_RATES.usn_6.fixedContribution
-        const additional = inc > 300000 ? (inc - 300000) * 0.01 : 0
+        const additional = annualIncome > 300000 ? (annualIncome - 300000) * 0.01 : 0
         const contributions = fixed + additional
-        const taxReduction = inc > 0 ? Math.min(tax, contributions) : 0
+        const taxReduction = annualIncome > 0 ? Math.min(tax, contributions) : 0
         const finalTax = Math.max(0, tax - taxReduction)
         calcResult = {
           tax: Math.round(finalTax),
           contributions: Math.round(contributions),
           total: Math.round(finalTax + contributions),
+          periodLabel: period === 'month' ? 'в месяц' : 'за год',
           details: [
-            { label: 'Доходы', value: `${inc.toLocaleString()} ₽` },
+            { label: period === 'month' ? 'Доход в месяц' : 'Доход за год', value: `${inc.toLocaleString()} ₽` },
+            { label: 'Годовой доход', value: `${annualIncome.toLocaleString()} ₽` },
             { label: 'Налог УСН', value: `${Math.round(tax).toLocaleString()} ₽` },
-            { label: 'Взносы', value: `${Math.round(contributions).toLocaleString()} ₽` },
+            { label: 'Взносы за год', value: `${Math.round(contributions).toLocaleString()} ₽` },
             { label: 'Вычет', value: `-${Math.round(taxReduction).toLocaleString()} ₽` },
           ]
         }
@@ -75,18 +85,20 @@ export default function CalculatorPage() {
       }
       case 'usn_15': {
         const rate = TAX_RATES.usn_15.rate / 100
-        const profit = Math.max(0, inc - exp)
+        const profit = Math.max(0, annualIncome - annualExpenses)
         const tax = profit * rate
-        const minTax = inc * 0.01
+        const minTax = annualIncome * 0.01
         const finalTax = Math.max(tax, minTax)
         calcResult = {
           tax: Math.round(finalTax),
           minTax: Math.round(minTax),
           contributions: 0,
           total: Math.round(finalTax),
+          periodLabel: period === 'month' ? 'в месяц' : 'за год',
           details: [
-            { label: 'Доходы', value: `${inc.toLocaleString()} ₽` },
-            { label: 'Расходы', value: `${exp.toLocaleString()} ₽` },
+            { label: period === 'month' ? 'Доход в месяц' : 'Доход за год', value: `${inc.toLocaleString()} ₽` },
+            { label: period === 'month' ? 'Расходы в месяц' : 'Расходы за год', value: `${exp.toLocaleString()} ₽` },
+            { label: 'Годовой доход', value: `${annualIncome.toLocaleString()} ₽` },
             { label: 'Прибыль', value: `${profit.toLocaleString()} ₽` },
             { label: 'Налог УСН', value: `${Math.round(tax).toLocaleString()} ₽` },
           ]
@@ -94,13 +106,15 @@ export default function CalculatorPage() {
         break
       }
       case 'patent': {
-        const potentialIncome = inc || 1000000
+        const potentialIncome = annualIncome || 1000000
         const patentCost = potentialIncome * 0.06
         calcResult = {
           tax: Math.round(patentCost),
           contributions: 0,
           total: Math.round(patentCost),
+          periodLabel: period === 'month' ? 'в месяц' : 'за год',
           details: [
+            { label: period === 'month' ? 'Доход в месяц' : 'Доход за год', value: `${inc.toLocaleString()} ₽` },
             { label: 'Потенциальный доход', value: `${potentialIncome.toLocaleString()} ₽` },
             { label: 'Стоимость патента', value: `${Math.round(patentCost).toLocaleString()} ₽` },
           ]
@@ -109,13 +123,15 @@ export default function CalculatorPage() {
       }
       case 'selfemployed': {
         const rate = TAX_RATES.selfemployed.rateLegal / 100
-        const tax = inc * rate
+        const tax = annualIncome * rate
         calcResult = {
           tax: Math.round(tax),
           contributions: 0,
           total: Math.round(tax),
+          periodLabel: period === 'month' ? 'в месяц' : 'за год',
           details: [
-            { label: 'Доход', value: `${inc.toLocaleString()} ₽` },
+            { label: period === 'month' ? 'Доход в месяц' : 'Доход за год', value: `${inc.toLocaleString()} ₽` },
+            { label: 'Годовой доход', value: `${annualIncome.toLocaleString()} ₽` },
             { label: 'Ставка', value: '6%' },
             { label: 'Налог', value: `${Math.round(tax).toLocaleString()} ₽` },
           ]
@@ -124,20 +140,22 @@ export default function CalculatorPage() {
       }
       case 'ooo': {
         const rate = TAX_RATES.ooo.rate / 100
-        const profit = Math.max(0, inc - exp)
+        const profit = Math.max(0, annualIncome - annualExpenses)
         const tax = profit * rate
-        const ndfl = sal * 12 * 0.13
-        const pension = sal * 12 * 0.22
-        const foms = sal * 12 * 0.051
-        const fss = sal * 12 * 0.029
+        const ndfl = annualSalary * 0.13
+        const pension = annualSalary * 0.22
+        const foms = annualSalary * 0.051
+        const fss = annualSalary * 0.029
         const contributions = pension + foms + fss
         calcResult = {
           tax: Math.round(tax),
           contributions: Math.round(contributions + ndfl),
           total: Math.round(tax + contributions + ndfl),
+          periodLabel: period === 'month' ? 'в месяц' : 'за год',
           details: [
-            { label: 'Доходы', value: `${inc.toLocaleString()} ₽` },
-            { label: 'Расходы', value: `${exp.toLocaleString()} ₽` },
+            { label: period === 'month' ? 'Доход в месяц' : 'Доход за год', value: `${inc.toLocaleString()} ₽` },
+            { label: period === 'month' ? 'Расходы в месяц' : 'Расходы за год', value: `${exp.toLocaleString()} ₽` },
+            { label: 'Годовой доход', value: `${annualIncome.toLocaleString()} ₽` },
             { label: 'Прибыль', value: `${profit.toLocaleString()} ₽` },
             { label: 'Налог УСН', value: `${Math.round(tax).toLocaleString()} ₽` },
           ]
@@ -145,7 +163,7 @@ export default function CalculatorPage() {
         break
       }
       default:
-        calcResult = { tax: 0, contributions: 0, total: 0, details: [] }
+        calcResult = { tax: 0, contributions: 0, total: 0, periodLabel: '', details: [] }
     }
 
     setResult(calcResult)
@@ -170,8 +188,39 @@ export default function CalculatorPage() {
 
       <div className="flex-1 overflow-y-auto p-4">
         <div className="max-w-4xl mx-auto">
+          {/* Period Selector */}
           <div className="mb-6">
-            <h2 className="text-sm font-semibold text-blue-300 mb-3">Выберите систему налогообложения</h2>
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar className="w-4 h-4 text-blue-400" />
+              <span className="text-sm font-semibold text-blue-300">Период расчёта</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setPeriod('year'); setResult(null) }}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  period === 'year'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white/10 text-gray-300 hover:bg-white/20'
+                }`}
+              >
+                Год
+              </button>
+              <button
+                onClick={() => { setPeriod('month'); setResult(null) }}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  period === 'month'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white/10 text-gray-300 hover:bg-white/20'
+                }`}
+              >
+                Месяц
+              </button>
+            </div>
+          </div>
+
+          {/* Tax Type Selector */}
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-blue-300 mb-3">Система налогообложения</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
               {taxTypes.map((type) => {
                 const Icon = type.icon
@@ -194,6 +243,7 @@ export default function CalculatorPage() {
             </div>
           </div>
 
+          {/* Input Form */}
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl border border-white/10 p-6 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <DollarSign className="w-5 h-5 text-blue-400" />
@@ -202,24 +252,28 @@ export default function CalculatorPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Годовой доход (₽)</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {period === 'month' ? 'Доход в месяц (₽)' : 'Годовой доход (₽)'}
+                </label>
                 <input
                   type="number"
                   value={income}
                   onChange={(e) => setIncome(e.target.value)}
-                  placeholder="Например: 1200000"
+                  placeholder={period === 'month' ? "Например: 100000" : "Например: 1200000"}
                   className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                 />
               </div>
 
               {(selectedType === 'usn_15' || selectedType === 'ooo') && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Годовые расходы (₽)</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {period === 'month' ? 'Расходы в месяц (₽)' : 'Годовые расходы (₽)'}
+                  </label>
                   <input
                     type="number"
                     value={expenses}
                     onChange={(e) => setExpenses(e.target.value)}
-                    placeholder="Например: 800000"
+                    placeholder={period === 'month' ? "Например: 65000" : "Например: 800000"}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   />
                 </div>
@@ -240,12 +294,14 @@ export default function CalculatorPage() {
 
               {selectedType === 'ooo' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Месячная зарплата (₽)</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {period === 'month' ? 'Месячная зарплата (₽)' : 'Годовой фонд зарплаты (₽)'}
+                  </label>
                   <input
                     type="number"
                     value={salary}
                     onChange={(e) => setSalary(e.target.value)}
-                    placeholder="Например: 50000"
+                    placeholder={period === 'month' ? "Например: 50000" : "Например: 600000"}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                   />
                 </div>
@@ -261,12 +317,13 @@ export default function CalculatorPage() {
             </button>
           </div>
 
+          {/* Results */}
           {result && (
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl border border-white/10 overflow-hidden">
               <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-blue-300 text-sm">Итого к уплате за год</p>
+                    <p className="text-blue-300 text-sm">Итого к уплате {result.periodLabel}</p>
                     <p className="text-3xl font-bold text-white">{result.total.toLocaleString()} ₽</p>
                   </div>
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
