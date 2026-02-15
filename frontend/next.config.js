@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'export',
+  // API routes работают на сервере
+  // output: 'export', // Убрали для работы API
   images: {
     unoptimized: true,
   },

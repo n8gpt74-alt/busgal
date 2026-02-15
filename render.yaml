@@ -11,3 +11,10 @@ services:
         value: 20
       - key: CHAT_TIMEOUT_MS
         value: 25000
+      - key: POLZA_API_KEY
+        sync: false
+        value: ""
+      - key: POLZA_API_URL
+        value: "https://api.polza.ai/api/v1"
+      - key: POLZA_MODEL
+        value: "openai/gpt-4o"
