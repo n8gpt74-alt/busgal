@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, memo, startTransition } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Bot, FileText, Bell, Calculator, TrendingUp, Shield, 
   CheckCircle, ArrowRight, Sparkles, Zap, CreditCard,
-  Briefcase, Users, Building
+  Briefcase, Users, Building, Calculator as CalcIcon,
+  MessageSquare, History
 } from 'lucide-react'
 import { initTelegramWebApp, isTelegramWebApp } from '@/lib/telegram'
+import { saveMessage, createChatSession, getChatSession, ChatSession } from '@/lib/chat-history'
 
 interface Message {
   id: string
@@ -16,6 +18,7 @@ interface Message {
   timestamp: Date
 }
 
+// Hoist static data outside component (rendering-hoist-jsx)
 const userTypes = [
   { 
     id: 'ip_usn', 
@@ -51,16 +54,103 @@ const userTypes = [
   }
 ]
 
+// Hoist welcome messages outside component
+const welcomeMessagesMap: Record<string, string> = {
+  'ip_usn': 'Привет! Я ваш AI-бухгалтер для ИП на УСН. Могу помочь с налогами, расходами, отчётностью. О чём хотите спросить?',
+  'ip_patent': 'Привет! Я ваш AI-бухгалтер для ИП на патенте. Расскажу про налоги, лимиты и требования. Что интересует?',
+  'selfemployed': 'Привет! Я ваш AI-бухгалтер для самозанятых. Помогу разобраться с чеками, налогами и доходами. О чём спросим?',
+  'ooo': 'Привет! Я ваш AI-бухгалтер для ООО. Могу помочь с налогами, зарплатами, отчётностью. Что хотите узнать?'
+}
+
+// Memoized message component (rerender-memo)
+const MessageItem = memo(function MessageItem({ message }: { message: Message }) {
+  const isUser = message.role === 'user'
+  return (
+    <motion.div
+      initial={{ y: 10, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+    >
+      <div
+        className={`max-w-[85%] rounded-2xl px-5 py-3 shadow-lg ${
+          isUser
+            ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
+            : 'bg-white/10 backdrop-blur-sm border border-white/10 text-gray-100'
+        }`}
+      >
+        <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+        <p className={`text-xs mt-2 ${isUser ? 'text-blue-200' : 'text-gray-500'}`}>
+          {message.timestamp.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+        </p>
+      </div>
+    </motion.div>
+  )
+})
+MessageItem.displayName = 'MessageItem'
+
+// Memoized user type button
+const UserTypeButton = memo(function UserTypeButton({ 
+  type, 
+  index, 
+  onClick 
+}: { 
+  type: typeof userTypes[0]
+  index: number
+  onClick: () => void
+}) {
+  return (
+    <motion.button
+      key={type.id}
+      onClick={onClick}
+      initial={{ x: -20, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      transition={{ delay: index * 0.1 }}
+      whileHover={{ scale: 1.02, x: 8 }}
+      whileTap={{ scale: 0.98 }}
+      className={`w-full p-4 text-left bg-gradient-to-r ${type.bgGradient} hover:from-white hover:to-gray-50 rounded-2xl transition-all duration-300 border border-white/20 hover:border-white/40 group`}
+    >
+      <div className="flex items-center gap-4">
+        <div className={`w-12 h-12 bg-gradient-to-br ${type.gradient} rounded-xl flex items-center justify-center shadow-lg`}>
+          <type.icon className="w-6 h-6 text-white" />
+        </div>
+        <div className="flex-1">
+          <p className="font-bold text-gray-900 text-lg">{type.name}</p>
+          <p className="text-sm text-gray-600">{type.desc}</p>
+        </div>
+        <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 group-hover:translate-x-1 transition-all" />
+      </div>
+    </motion.button>
+  )
+})
+UserTypeButton.displayName = 'UserTypeButton'
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [userType, setUserType] = useState<string>('')
   const [showTypeSelector, setShowTypeSelector] = useState(true)
+  const [sessionId, setSessionId] = useState<string>('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     initTelegramWebApp()
+    
+    // Check for session ID in URL
+    const params = new URLSearchParams(window.location.search)
+    const sessionParam = params.get('session')
+    if (sessionParam) {
+      const session = getChatSession(sessionParam)
+      if (session) {
+        setSessionId(session.id)
+        setUserType(session.userType)
+        setShowTypeSelector(false)
+        setMessages(session.messages.map(m => ({
+          ...m,
+          timestamp: new Date(m.timestamp)
+        })))
+      }
+    }
   }, [])
 
   const scrollToBottom = () => {
@@ -85,6 +175,11 @@ export default function Home() {
     setInput('')
     setIsLoading(true)
 
+    // Save user message
+    if (sessionId) {
+      saveMessage(sessionId, { role: 'user', content: input })
+    }
+
     try {
       const response = await fetch(process.env.NEXT_PUBLIC_CHAT_API_URL || '/api/chat', {
         method: 'POST',
@@ -106,6 +201,11 @@ export default function Home() {
       }
 
       setMessages(prev => [...prev, assistantMessage])
+      
+      // Save assistant response
+      if (sessionId) {
+        saveMessage(sessionId, { role: 'assistant', content: data.response })
+      }
     } catch (error) {
       console.error('Error:', error)
       setMessages(prev => [...prev, {
@@ -126,28 +226,30 @@ export default function Home() {
     }
   }
 
+  const getWelcomeMessage = (type: string) => welcomeMessagesMap[type] || 'Привет! Я ваш AI-бухгалтер. Чем могу помочь?'
+
   const selectUserType = (type: string) => {
-    setUserType(type)
-    setShowTypeSelector(false)
-    setMessages([{
+    const newSession = createChatSession(type)
+    // Use startTransition for non-blocking UI update (rerender-transitions)
+    startTransition(() => {
+      setSessionId(newSession.id)
+      setUserType(type)
+      setShowTypeSelector(false)
+    })
+    const welcomeMsg = {
       id: '1',
-      role: 'assistant',
-      content: getWelcomeMessage(type),
+      role: 'assistant' as const,
+      content: welcomeMessagesMap[type] || getWelcomeMessage(type),
       timestamp: new Date()
-    }])
-  }
-
-  const getWelcomeMessage = (type: string) => {
-    const messages: Record<string, string> = {
-      'ip_usn': 'Привет! Я ваш AI-бухгалтер для ИП на УСН. Могу помочь с налогами, расходами, отчётностью. О чём хотите спросить?',
-      'ip_patent': 'Привет! Я ваш AI-бухгалтер для ИП на патенте. Расскажу про налоги, лимиты и требования. Что интересует?',
-      'selfemployed': 'Привет! Я ваш AI-бухгалтер для самозанятых. Помогу разобраться с чеками, налогами и доходами. О чём спросим?',
-      'ooo': 'Привет! Я ваш AI-бухгалтер для ООО. Могу помочь с налогами, зарплатами, отчётностью. Что хотите узнать?'
     }
-    return messages[type] || 'Привет! Я ваш AI-бухгалтер. Чем могу помочь?'
+    setMessages([welcomeMsg])
+    
+    // Save initial message
+    saveMessage(newSession.id, { role: 'assistant', content: welcomeMsg.content })
   }
 
-  const currentType = userTypes.find(t => t.id === userType)
+  // Use useMemo for derived state (rerender-derived-state)
+  const currentType = useMemo(() => userTypes.find(t => t.id === userType), [userType])
 
   return (
     <div className="flex flex-col h-screen bg-[#0a0a0f]">
@@ -186,6 +288,15 @@ export default function Home() {
           
           <div className="flex items-center gap-2">
             <motion.a 
+              href="/calculator"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-3 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-white/10 rounded-xl transition-all flex items-center gap-2"
+            >
+              <CalcIcon className="w-4 h-4" />
+              <span className="hidden sm:inline">Калькулятор</span>
+            </motion.a>
+            <motion.a 
               href="/documents"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -201,6 +312,14 @@ export default function Home() {
               className="px-3 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-white/10 rounded-xl transition-all flex items-center gap-2"
             >
               <Bell className="w-4 h-4" />
+            </motion.a>
+            <motion.a 
+              href="/history"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-3 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-white/10 rounded-xl transition-all flex items-center gap-2"
+            >
+              <History className="w-4 h-4" />
             </motion.a>
             <motion.button 
               onClick={() => { setMessages([]); setShowTypeSelector(true) }}
@@ -290,26 +409,7 @@ export default function Home() {
                 )}
                 
                 {messages.map((message, index) => (
-                  <motion.div
-                    key={message.id}
-                    initial={{ y: 10, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-5 py-3 shadow-lg ${
-                        message.role === 'user'
-                          ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
-                          : 'bg-white/10 backdrop-blur-sm border border-white/10 text-gray-100'
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
-                      <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-blue-200' : 'text-gray-500'}`}>
-                        {message.timestamp.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </motion.div>
+                  <MessageItem key={message.id} message={message} />
                 ))}
                 {isLoading && (
                   <motion.div 

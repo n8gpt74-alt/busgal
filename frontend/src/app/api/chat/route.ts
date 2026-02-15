@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { buildSystemPrompt } from '@/data/tax-knowledge'
+import { searchKnowledge, buildContextFromResults, shouldUseRAG } from '@/data/knowledge'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -21,7 +22,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const systemPrompt = buildSystemPrompt(userType || 'ip_usn')
+    // Используем RAG для поиска релевантных документов
+    const useRAG = shouldUseRAG(message)
+    let ragContext = ''
+    
+    if (useRAG) {
+      const searchResults = searchKnowledge(message, userType || 'ip_usn', 3)
+      ragContext = buildContextFromResults(searchResults, 4000)
+      console.log('RAG: Найдено документов:', searchResults.length, 'Совпадения:', searchResults.map(r => r.matchedKeywords).flat().slice(0, 10))
+    }
+
+    // Базовый системный промпт
+    const basePrompt = buildSystemPrompt(userType || 'ip_usn')
+    
+    // Добавляем RAG контекст, если найден
+    const systemPrompt = ragContext 
+      ? `${basePrompt}
+
+${ragContext}
+
+## Важные инструкции по использованию контекста:
+1. Используй предоставленную информацию из базы знаний для точных ответов
+2. Всегда указывай конкретные статьи НК РФ или законов при упоминании правил
+3. Приводи точные суммы, ставки и лимиты на ${new Date().getFullYear()} год
+4. Если в контексте есть ответ на вопрос - используй его
+5. Если информации недостаточно - скажи об этом`
+      : basePrompt
 
     // Формируем историю сообщений для контекста
     const messages: Array<{ role: string; content: string }> = [
@@ -54,11 +80,12 @@ export async function POST(request: NextRequest) {
     const useStub = !apiKey
 
     if (useStub) {
+      const ragInfo = ragContext ? '\n\n(Использован RAG контекст для поиска ответа)' : ''
       const assistantResponse = `Заглушка ответа (нет POLZA_API_KEY).
 
 Ваш вопрос: ${message}
 Тип: ${userType || 'ip_usn'}
-Сообщений в истории: ${Array.isArray(history) ? history.length : 0}`
+Сообщений в истории: ${Array.isArray(history) ? history.length : 0}${ragInfo}`
 
       return NextResponse.json({
         response: assistantResponse,
@@ -112,6 +139,6 @@ export async function POST(request: NextRequest) {
       { error: 'Internal server error' },
       { status: 500 }
     )
-}
+  }
 }
 
