@@ -1,15 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // API routes работают на сервере
-  // output: 'export', // Убрали для работы API
+  // Для Netlify используем static export
+  // API чата работает через Cloudflare Worker
+  output: 'export',
   images: {
     unoptimized: true,
   },
+  // Переопределяем URL API на Cloudflare Worker
   env: {
-    POLZA_API_KEY: process.env.POLZA_API_KEY,
-    POLZA_API_URL: process.env.POLZA_API_URL,
-    POLZA_MODEL: process.env.POLZA_MODEL,
+    NEXT_PUBLIC_CHAT_API_URL: process.env.NEXT_PUBLIC_CHAT_API_URL || 'https://busgal-chat.busgal-n8gpt.workers.dev/chat',
   },
 }
 
